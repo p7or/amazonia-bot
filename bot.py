@@ -2,25 +2,24 @@ import requests
 import time
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 BOT_TOKEN = "8856681028:AAFhlhK86ykh5kmm6yax_wfBCtgkgO8ycQM"
 CHAT_ID = "-1003718314738"
 MIN_DISCOUNT = 20
 ASSOCIATE_TAG = "sadealsbot-20"
 RAPIDAPI_KEY = "83f7accaedmshd6aaf3e480061f7p19cb11jsne3c6c8dbfef0"
+SEEN_FILE = "seen_deals.json"
 
-# ذاكرة العروض: {deal_id: وقت النشر}
-seen_deals = {}
+def load_seen():
+    if os.path.exists(SEEN_FILE):
+        with open(SEEN_FILE, "r") as f:
+            return set(json.load(f))
+    return set()
 
-def clean_old_seen():
-    """احذف العروض القديمة من الذاكرة بعد 24 ساعة"""
-    now = datetime.now()
-    expired = [k for k, v in seen_deals.items() if now - v > timedelta(hours=24)]
-    for k in expired:
-        del seen_deals[k]
-    if expired:
-        print(f"🧹 حذف {len(expired)} عرض قديم من الذاكرة")
+def save_seen(seen):
+    with open(SEEN_FILE, "w") as f:
+        json.dump(list(seen), f)
 
 def send_photo(photo_url, caption):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -132,24 +131,26 @@ def run_bot():
         "#صيدات #أمازون #السعودية"
     )
 
+    seen = load_seen()
+
     while True:
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] جاري جلب العروض...")
-        clean_old_seen()
         deals = fetch_deals()
-        new_deals = [d for d in deals if d.get("deal_id") not in seen_deals]
+        new_deals = [d for d in deals if d.get("deal_id") not in seen]
         print(f"عروض جديدة: {len(new_deals)}")
 
         if new_deals:
             for deal in new_deals:
                 post_deal(deal)
-                seen_deals[deal.get("deal_id")] = datetime.now()
+                seen.add(deal.get("deal_id"))
+                save_seen(seen)
                 time.sleep(3)
             print(f"✅ تم نشر {len(new_deals)} صيدة جديدة")
         else:
             print("لا توجد عروض جديدة")
 
         print("⏰ انتظار 5 دقائق...")
-        time.sleep(300)
+        time.sleep(3600)
 
 if __name__ == "__main__":
     run_bot()
