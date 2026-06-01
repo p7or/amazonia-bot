@@ -1,5 +1,7 @@
 import requests
 import time
+import json
+import os
 from datetime import datetime
 
 BOT_TOKEN = "8856681028:AAFhlhK86ykh5kmm6yax_wfBCtgkgO8ycQM"
@@ -7,6 +9,17 @@ CHAT_ID = "-1003718314738"
 MIN_DISCOUNT = 20
 ASSOCIATE_TAG = "sadealsbot-20"
 RAPIDAPI_KEY = "83f7accaedmshd6aaf3e480061f7p19cb11jsne3c6c8dbfef0"
+SEEN_FILE = "seen_deals.json"
+
+def load_seen():
+    if os.path.exists(SEEN_FILE):
+        with open(SEEN_FILE, "r") as f:
+            return set(json.load(f))
+    return set()
+
+def save_seen(seen):
+    with open(SEEN_FILE, "w") as f:
+        json.dump(list(seen), f)
 
 def send_photo(photo_url, caption):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -19,7 +32,6 @@ def send_photo(photo_url, caption):
         }, timeout=15)
         result = r.json()
         if not result.get("ok"):
-            print(f"Photo error: {result}")
             send_message(caption)
         return result
     except Exception as e:
@@ -56,9 +68,8 @@ def fetch_deals():
         r = requests.get(url, headers=headers, params=params, timeout=20)
         data = r.json()
         deals = data.get("data", {}).get("deals", [])
-        print(f"Total deals: {len(deals)}")
         filtered = [d for d in deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
-        print(f"Deals +{MIN_DISCOUNT}%: {len(filtered)}")
+        print(f"Total: {len(deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
         return filtered
     except Exception as e:
         print(f"API error: {e}")
@@ -92,22 +103,27 @@ def run_bot():
     print("🤖 بوت Amazonia SA يعمل...")
     send_message(
         "🛍️ <b>بوت Amazonia SA</b> يعمل الآن! 🔥\n\n"
-        "سيتم نشر أفضل الصيدات بخصم كل ساعة\n\n"
+        "سيتم نشر العروض الجديدة فقط كل ساعة\n\n"
         "#صيدات #أمازون #السعودية"
     )
+
+    seen = load_seen()
 
     while True:
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] جاري جلب العروض...")
         deals = fetch_deals()
+        new_deals = [d for d in deals if d.get("deal_id") not in seen]
+        print(f"عروض جديدة: {len(new_deals)}")
 
-        if deals:
-            for i, deal in enumerate(deals[:10]):
+        if new_deals:
+            for deal in new_deals[:10]:
                 post_deal(deal)
+                seen.add(deal.get("deal_id"))
+                save_seen(seen)
                 time.sleep(3)
-            print(f"✅ تم نشر {min(len(deals), 10)} صيدة")
+            print(f"✅ تم نشر {min(len(new_deals), 10)} صيدة جديدة")
         else:
-            print("❌ لا توجد صيدات الآن")
-            send_message("⏳ لا توجد صيدات حالياً، سيتم المحاولة بعد ساعة...")
+            print("لا توجد عروض جديدة")
 
         print("⏰ انتظار ساعة...")
         time.sleep(3600)
