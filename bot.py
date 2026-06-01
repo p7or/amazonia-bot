@@ -4,7 +4,7 @@ import time
 import re
 from datetime import datetime
 
-BOT_TOKEN = "8850824192:AAFHWbn3CceUWWdtxaJvIF2mNtm_G4JXraw"
+BOT_TOKEN = "8856681028:AAFhlhK86ykh5kmm6yax_wfBCtgkgO8ycQM"
 CHAT_ID = "-1003718314738"
 MIN_DISCOUNT = 50
 ASSOCIATE_TAG = "sadealsbot-20"
