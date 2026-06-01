@@ -7,11 +7,14 @@ from datetime import datetime
 BOT_TOKEN = "8850824192:AAFHWbn3CceUWWdtxaJvIF2mNtm_G4JXraw"
 CHAT_ID = "-1003718314738"
 MIN_DISCOUNT = 50
+ASSOCIATE_TAG = "sadealsbot-20"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "ar-SA,ar;q=0.9,en;q=0.8",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept-Language": "ar-SA,ar;q=0.9,en-US;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
 }
 
 def send_telegram(message, parse_mode="HTML"):
@@ -23,120 +26,174 @@ def send_telegram(message, parse_mode="HTML"):
         "disable_web_page_preview": False
     }
     try:
-        r = requests.post(url, json=data, timeout=10)
-        return r.json()
+        r = requests.post(url, json=data, timeout=15)
+        result = r.json()
+        if not result.get("ok"):
+            print(f"Telegram error: {result}")
+        return result
     except Exception as e:
-        print(f"Telegram error: {e}")
+        print(f"Telegram exception: {e}")
         return None
 
-def fetch_deals():
+def fetch_deals_goldbox():
     deals = []
     try:
-        url = "https://www.amazon.sa/gp/goldbox"
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        html = r.text
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        urls = [
+            "https://www.amazon.sa/-/ar/gp/goldbox",
+            "https://www.amazon.sa/gp/goldbox",
+            "https://www.amazon.sa/-/ar/deals",
+        ]
+        html = ""
+        for url in urls:
+            try:
+                r = session.get(url, timeout=20)
+                if r.status_code == 200 and len(r.text) > 1000:
+                    html = r.text
+                    print(f"Got HTML from: {url} ({len(html)} chars)")
+                    break
+            except Exception as e:
+                print(f"URL failed {url}: {e}")
+                continue
 
-        # Extract deal blocks
-        pattern = r'"title"\s*:\s*"([^"]+)".*?"discountPercentage"\s*:\s*"(-?\d+)".*?"price"\s*:\s*\{"amount"\s*:\s*"([\d.]+)".*?"priceStrikethrough"\s*:\s*\{"amount"\s*:\s*"([\d.]+)".*?"dealId"\s*:\s*"([^"]+)"'
-        matches = re.findall(pattern, html, re.DOTALL)
+        if not html:
+            return deals
 
-        for m in matches[:20]:
-            title, discount, price, original, deal_id = m
-            discount = abs(int(discount))
-            if discount >= MIN_DISCOUNT:
-                deals.append({
-                    "title": title[:80],
-                    "discount": discount,
-                    "price": float(price),
-                    "original": float(original),
-                    "url": f"https://www.amazon.sa/dp/{deal_id}?tag=sadealsbot-20"
-                })
+        asin_pattern = r'"asin"\s*:\s*"([A-Z0-9]{10})"'
+        discount_pattern = r'"discountPercentage"\s*:\s*"(\d+)"'
+        title_pattern = r'"title"\s*:\s*"([^"]{10,100})"'
+        price_pattern = r'"price"\s*:\s*\{"amount"\s*:\s*"([\d.]+)"'
 
+        asins = re.findall(asin_pattern, html)
+        discounts = re.findall(discount_pattern, html)
+        titles = re.findall(title_pattern, html)
+        prices = re.findall(price_pattern, html)
+
+        print(f"Found: {len(asins)} ASINs, {len(discounts)} discounts, {len(titles)} titles")
+
+        seen = set()
+        for i in range(min(len(asins), len(discounts), len(titles))):
+            try:
+                disc = int(discounts[i])
+                asin = asins[i]
+                if disc >= MIN_DISCOUNT and asin not in seen:
+                    seen.add(asin)
+                    price = float(prices[i]) if i < len(prices) else 0
+                    deals.append({
+                        "title": titles[i][:80],
+                        "discount": disc,
+                        "price": price,
+                        "asin": asin,
+                        "url": f"https://www.amazon.sa/dp/{asin}?tag={ASSOCIATE_TAG}"
+                    })
+            except:
+                continue
+
+        if not deals:
+            div_pattern = r'<div[^>]*data-asin="([A-Z0-9]{10})"[^>]*>.*?(\d+)%\s*(?:off|خصم)'
+            matches = re.findall(div_pattern, html, re.DOTALL)
+            for asin, disc in matches[:20]:
+                disc = int(disc)
+                if disc >= MIN_DISCOUNT and asin not in seen:
+                    seen.add(asin)
+                    deals.append({
+                        "title": f"عرض أمازون - {asin}",
+                        "discount": disc,
+                        "price": 0,
+                        "asin": asin,
+                        "url": f"https://www.amazon.sa/dp/{asin}?tag={ASSOCIATE_TAG}"
+                    })
     except Exception as e:
         print(f"Scraping error: {e}")
-
-    # Fallback: try deals page differently
-    if not deals:
-        try:
-            url = "https://www.amazon.sa/deals"
-            r = requests.get(url, headers=HEADERS, timeout=15)
-            html = r.text
-
-            # Try to find percentage discounts
-            titles = re.findall(r'class="[^"]*deal-title[^"]*"[^>]*>([^<]+)<', html)
-            discounts = re.findall(r'(\d+)%\s*off', html)
-            links = re.findall(r'href="(/dp/[A-Z0-9]+[^"]*)"', html)
-
-            for i, disc in enumerate(discounts[:15]):
-                if int(disc) >= MIN_DISCOUNT:
-                    title = titles[i] if i < len(titles) else f"عرض أمازون #{i+1}"
-                    link = f"https://www.amazon.sa{links[i]}?tag=sadealsbot-20" if i < len(links) else "https://www.amazon.sa/deals"
-                    deals.append({
-                        "title": title.strip()[:80],
-                        "discount": int(disc),
-                        "price": 0,
-                        "original": 0,
-                        "url": link
-                    })
-        except Exception as e:
-            print(f"Fallback error: {e}")
-
     return deals
 
-def format_deal(deal, index):
-    fire = "🔥" if deal["discount"] >= 70 else "⚡"
-    price_text = ""
-    if deal["price"] > 0 and deal["original"] > 0:
-        price_text = f"\n💰 <b>{deal['price']:.2f} ر.س</b> <s>{deal['original']:.2f} ر.س</s>"
+def fetch_deals_search():
+    deals = []
+    try:
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        for term in ["عروض", "تخفيضات", "deals"]:
+            url = f"https://www.amazon.sa/s?k={term}&rh=p_n_pct-off-with-tax%3A5172720031"
+            r = session.get(url, timeout=20)
+            if r.status_code != 200:
+                continue
+            html = r.text
+            asin_blocks = re.findall(
+                r'data-asin="([A-Z0-9]{10})".*?'
+                r'<span[^>]*class="[^"]*a-price-whole[^"]*"[^>]*>([^<]+)</span>.*?'
+                r'<span[^>]*class="[^"]*savingsPercentage[^"]*"[^>]*>-(\d+)%</span>',
+                html, re.DOTALL
+            )
+            for asin, price, disc in asin_blocks[:15]:
+                disc = int(disc)
+                if disc >= MIN_DISCOUNT:
+                    deals.append({
+                        "title": f"منتج أمازون #{asin}",
+                        "discount": disc,
+                        "price": float(price.replace(',', '').strip()) if price else 0,
+                        "asin": asin,
+                        "url": f"https://www.amazon.sa/dp/{asin}?tag={ASSOCIATE_TAG}"
+                    })
+            if deals:
+                break
+    except Exception as e:
+        print(f"Search scraping error: {e}")
+    return deals
 
+def format_deal(deal):
+    fire = "🔥" if deal["discount"] >= 70 else "⚡"
+    price_text = f"\n💰 <b>{deal['price']:.2f} ر.س</b>" if deal.get("price", 0) > 0 else ""
     return (
         f"{fire} <b>{deal['title']}</b>\n"
         f"🏷️ خصم <b>{deal['discount']}%</b>{price_text}\n"
-        f"🛒 <a href='{deal['url']}'>اشتري من أمازون</a>\n"
+        f"🛒 <a href='{deal['url']}'>اشتري من أمازون السعودية</a>\n"
     )
 
 def run_bot():
     print("🤖 بوت Amazonia SA يعمل...")
-    send_telegram(
-        "🛍️ <b>بوت Amazonia SA</b> يعمل الآن!\n"
-        "سيتم نشر أفضل الصيدات كل ساعة 🔥\n"
-        f"فلتر: خصم +{MIN_DISCOUNT}%"
+    test = send_telegram(
+        "🛍️ <b>بوت Amazonia SA</b> يعمل الآن! 🔥\n\n"
+        "سيتم نشر أفضل الصيدات بخصم +50% كل ساعة\n\n"
+        "#صيدات #أمازون #السعودية"
     )
+    print(f"Telegram test: {test}")
 
     while True:
-        print(f"\n[{datetime.now().strftime('%H:%M:%S')}] جاري جلب العروض...")
-        deals = fetch_deals()
+        now = datetime.now().strftime('%H:%M:%S')
+        print(f"\n[{now}] جاري جلب العروض...")
+        deals = fetch_deals_goldbox()
+        print(f"Goldbox deals: {len(deals)}")
+        if not deals:
+            deals = fetch_deals_search()
+            print(f"Search deals: {len(deals)}")
 
         if deals:
-            header = f"🛍️ <b>صيدات أمازون السعودية</b> | {datetime.now().strftime('%I:%M %p')}\n خصم +{MIN_DISCOUNT}% |\n\n"
-            messages = [header]
-            for i, deal in enumerate(deals[:10]):
-                messages.append(format_deal(deal, i+1))
-
-            full_msg = "\n".join(messages) + "\n\n#صيدات #أمازون #السعودية"
-
-            # Split if too long
-            if len(full_msg) > 4000:
-                chunks = []
-                chunk = header
-                for i, deal in enumerate(deals[:10]):
-                    line = format_deal(deal, i+1) + "\n"
-                    if len(chunk) + len(line) > 3800:
-                        chunks.append(chunk)
-                        chunk = line
-                    else:
-                        chunk += line
-                chunks.append(chunk + "\n#صيدات #أمازون #السعودية")
-                for c in chunks:
-                    send_telegram(c)
-                    time.sleep(1)
-            else:
-                send_telegram(full_msg)
-
-            print(f"✅ تم نشر {len(deals)} صيدة")
+            header = (
+                f"🛍️ <b>صيدات أمازون السعودية</b>\n"
+                f"🕐 {datetime.now().strftime('%I:%M %p')} | خصم +{MIN_DISCOUNT}%\n"
+                f"{'─'*25}\n\n"
+            )
+            chunk = header
+            sent = 0
+            for deal in deals[:10]:
+                line = format_deal(deal) + "\n"
+                if len(chunk) + len(line) > 3800:
+                    send_telegram(chunk + "\n#صيدات #أمازون #السعودية")
+                    time.sleep(2)
+                    chunk = line
+                    sent += 1
+                else:
+                    chunk += line
+            if chunk.strip():
+                send_telegram(chunk + "\n#صيدات #أمازون #السعودية")
+                sent += 1
+            print(f"✅ تم نشر {len(deals)} صيدة في {sent} رسالة")
         else:
             print("❌ لم يتم العثور على صيدات")
-            send_telegram("⏳ جاري البحث عن الصيدات... سيتم النشر قريباً")
+            send_telegram("⏳ لم يتم العثور على صيدات حالياً، سيتم المحاولة مرة أخرى...")
+            time.sleep(1800)
+            continue
 
         print("⏰ انتظار ساعة...")
         time.sleep(3600)
