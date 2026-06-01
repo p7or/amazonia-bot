@@ -4,7 +4,7 @@ from datetime import datetime
 
 BOT_TOKEN = "8856681028:AAFhlhK86ykh5kmm6yax_wfBCtgkgO8ycQM"
 CHAT_ID = "-1003718314738"
-MIN_DISCOUNT = 30
+MIN_DISCOUNT = 20
 ASSOCIATE_TAG = "sadealsbot-20"
 RAPIDAPI_KEY = "83f7accaedmshd6aaf3e480061f7p19cb11jsne3c6c8dbfef0"
 
