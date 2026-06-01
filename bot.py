@@ -53,27 +53,39 @@ def send_message(text):
         return None
 
 def fetch_deals():
-    url = "https://real-time-amazon-data.p.rapidapi.com/deals-v2"
-    params = {
-        "country": "SA",
-        "min_product_star_rating": "ALL",
-        "price_range": "ALL",
-        "discount_range": "ALL"
-    }
+    all_deals = []
     headers = {
         "x-rapidapi-host": "real-time-amazon-data.p.rapidapi.com",
         "x-rapidapi-key": RAPIDAPI_KEY
     }
-    try:
-        r = requests.get(url, headers=headers, params=params, timeout=20)
-        data = r.json()
-        deals = data.get("data", {}).get("deals", [])
-        filtered = [d for d in deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
-        print(f"Total: {len(deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
-        return filtered
-    except Exception as e:
-        print(f"API error: {e}")
-        return []
+    for page in range(1, 6):
+        params = {
+            "country": "SA",
+            "min_product_star_rating": "ALL",
+            "price_range": "ALL",
+            "discount_range": "ALL",
+            "num_pages": page
+        }
+        try:
+            r = requests.get(
+                "https://real-time-amazon-data.p.rapidapi.com/deals-v2",
+                headers=headers,
+                params=params,
+                timeout=20
+            )
+            data = r.json()
+            deals = data.get("data", {}).get("deals", [])
+            if not deals:
+                break
+            all_deals.extend(deals)
+            time.sleep(1)
+        except Exception as e:
+            print(f"API error page {page}: {e}")
+            break
+
+    filtered = [d for d in all_deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
+    print(f"Total: {len(all_deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
+    return filtered
 
 def post_deal(deal):
     discount = deal.get("savings_percentage") or 0
@@ -115,7 +127,7 @@ def run_bot():
     print("🤖 بوت Amazonia SA يعمل...")
     send_message(
         "🛍️ <b>بوت Amazonia SA</b> يعمل الآن! 🔥\n\n"
-        "سيتم نشر العروض الجديدة فقط كل 5 دقائق\n\n"
+        "سيتم نشر العروض الجديدة كل 5 دقائق\n\n"
         "#صيدات #أمازون #السعودية"
     )
 
@@ -128,12 +140,12 @@ def run_bot():
         print(f"عروض جديدة: {len(new_deals)}")
 
         if new_deals:
-            for deal in new_deals[:10]:
+            for deal in new_deals:
                 post_deal(deal)
                 seen.add(deal.get("deal_id"))
                 save_seen(seen)
                 time.sleep(3)
-            print(f"✅ تم نشر {min(len(new_deals), 10)} صيدة جديدة")
+            print(f"✅ تم نشر {len(new_deals)} صيدة جديدة")
         else:
             print("لا توجد عروض جديدة")
 
