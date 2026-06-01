@@ -1,7 +1,6 @@
 import requests
 import time
 import json
-import os
 from datetime import datetime
 
 BOT_TOKEN = "8856681028:AAFhlhK86ykh5kmm6yax_wfBCtgkgO8ycQM"
@@ -9,17 +8,32 @@ CHAT_ID = "-1003718314738"
 MIN_DISCOUNT = 20
 ASSOCIATE_TAG = "sadealsbot-20"
 RAPIDAPI_KEY = "83f7accaedmshd6aaf3e480061f7p19cb11jsne3c6c8dbfef0"
-SEEN_FILE = "seen_deals.json"
 
-def load_seen():
-    if os.path.exists(SEEN_FILE):
-        with open(SEEN_FILE, "r") as f:
-            return set(json.load(f))
-    return set()
+UPSTASH_URL = "https://apparent-mustang-140877.upstash.io"
+UPSTASH_TOKEN = "gQAAAAAAAiZNAAIgcDFmNzY2MDFiMWEwYTE0NWI1ODc3NmVkZjQyZjMwMzczNQ"
 
-def save_seen(seen):
-    with open(SEEN_FILE, "w") as f:
-        json.dump(list(seen), f)
+def redis_get(key):
+    try:
+        r = requests.get(
+            f"{UPSTASH_URL}/get/{key}",
+            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"},
+            timeout=10
+        )
+        result = r.json().get("result")
+        return json.loads(result) if result else []
+    except:
+        return []
+
+def redis_set(key, value):
+    try:
+        requests.post(
+            f"{UPSTASH_URL}/set/{key}",
+            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"},
+            json={"value": json.dumps(value)},
+            timeout=10
+        )
+    except Exception as e:
+        print(f"Redis error: {e}")
 
 def send_photo(photo_url, caption):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -131,10 +145,10 @@ def run_bot():
         "#صيدات #أمازون #السعودية"
     )
 
-    seen = load_seen()
-
     while True:
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] جاري جلب العروض...")
+        
+        seen = set(redis_get("seen_deals"))
         deals = fetch_deals()
         new_deals = [d for d in deals if d.get("deal_id") not in seen]
         print(f"عروض جديدة: {len(new_deals)}")
@@ -143,13 +157,13 @@ def run_bot():
             for deal in new_deals:
                 post_deal(deal)
                 seen.add(deal.get("deal_id"))
-                save_seen(seen)
                 time.sleep(3)
+            redis_set("seen_deals", list(seen))
             print(f"✅ تم نشر {len(new_deals)} صيدة جديدة")
         else:
             print("لا توجد عروض جديدة")
 
-        print("⏰ انتظار 5 دقائق...")
+        print("⏰ انتظار ساعة...")
         time.sleep(3600)
 
 if __name__ == "__main__":
