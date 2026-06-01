@@ -1,6 +1,7 @@
 import requests
 import time
 import json
+import os
 from datetime import datetime
 
 BOT_TOKEN = "8856681028:AAFhlhK86ykh5kmm6yax_wfBCtgkgO8ycQM"
@@ -8,32 +9,17 @@ CHAT_ID = "-1003718314738"
 MIN_DISCOUNT = 20
 ASSOCIATE_TAG = "sadealsbot-20"
 RAPIDAPI_KEY = "83f7accaedmshd6aaf3e480061f7p19cb11jsne3c6c8dbfef0"
+SEEN_FILE = "seen_deals.json"
 
-UPSTASH_URL = "https://apparent-mustang-140877.upstash.io"
-UPSTASH_TOKEN = "gQAAAAAAAiZNAAIgcDFmNzY2MDFiMWEwYTE0NWI1ODc3NmVkZjQyZjMwMzczNQ"
+def load_seen():
+    if os.path.exists(SEEN_FILE):
+        with open(SEEN_FILE, "r") as f:
+            return set(json.load(f))
+    return set()
 
-def redis_sadd(deal_id):
-    try:
-        r = requests.get(
-            f"{UPSTASH_URL}/sadd/seen_deals/{deal_id}",
-            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"},
-            timeout=10
-        )
-        return r.json()
-    except Exception as e:
-        print(f"Redis sadd error: {e}")
-
-def redis_sismember(deal_id):
-    try:
-        r = requests.get(
-            f"{UPSTASH_URL}/sismember/seen_deals/{deal_id}",
-            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"},
-            timeout=10
-        )
-        return r.json().get("result") == 1
-    except Exception as e:
-        print(f"Redis sismember error: {e}")
-        return False
+def save_seen(seen):
+    with open(SEEN_FILE, "w") as f:
+        json.dump(list(seen), f)
 
 def send_photo(photo_url, caption):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
@@ -67,39 +53,27 @@ def send_message(text):
         return None
 
 def fetch_deals():
-    all_deals = []
+    url = "https://real-time-amazon-data.p.rapidapi.com/deals-v2"
+    params = {
+        "country": "SA",
+        "min_product_star_rating": "ALL",
+        "price_range": "ALL",
+        "discount_range": "ALL"
+    }
     headers = {
         "x-rapidapi-host": "real-time-amazon-data.p.rapidapi.com",
         "x-rapidapi-key": RAPIDAPI_KEY
     }
-    for page in range(1, 6):
-        params = {
-            "country": "SA",
-            "min_product_star_rating": "ALL",
-            "price_range": "ALL",
-            "discount_range": "ALL",
-            "num_pages": page
-        }
-        try:
-            r = requests.get(
-                "https://real-time-amazon-data.p.rapidapi.com/deals-v2",
-                headers=headers,
-                params=params,
-                timeout=20
-            )
-            data = r.json()
-            deals = data.get("data", {}).get("deals", [])
-            if not deals:
-                break
-            all_deals.extend(deals)
-            time.sleep(1)
-        except Exception as e:
-            print(f"API error page {page}: {e}")
-            break
-
-    filtered = [d for d in all_deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
-    print(f"Total: {len(all_deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
-    return filtered
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=20)
+        data = r.json()
+        deals = data.get("data", {}).get("deals", [])
+        filtered = [d for d in deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
+        print(f"Total: {len(deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
+        return filtered
+    except Exception as e:
+        print(f"API error: {e}")
+        return []
 
 def post_deal(deal):
     discount = deal.get("savings_percentage") or 0
@@ -145,23 +119,25 @@ def run_bot():
         "#صيدات #أمازون #السعودية"
     )
 
+    seen = load_seen()
+
     while True:
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] جاري جلب العروض...")
-
         deals = fetch_deals()
-        new_deals = [d for d in deals if not redis_sismember(d.get("deal_id", ""))]
+        new_deals = [d for d in deals if d.get("deal_id") not in seen]
         print(f"عروض جديدة: {len(new_deals)}")
 
         if new_deals:
-            for deal in new_deals:
+            for deal in new_deals[:10]:
                 post_deal(deal)
-                redis_sadd(deal.get("deal_id", ""))
+                seen.add(deal.get("deal_id"))
+                save_seen(seen)
                 time.sleep(3)
-            print(f"✅ تم نشر {len(new_deals)} صيدة جديدة")
+            print(f"✅ تم نشر {min(len(new_deals), 10)} صيدة جديدة")
         else:
             print("لا توجد عروض جديدة")
 
-        print("⏰ انتظار ساعة...")
+        print("⏰ انتظار 5 دقائق...")
         time.sleep(300)
 
 if __name__ == "__main__":
