@@ -124,13 +124,14 @@ def run_bot():
     while True:
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] جاري جلب العروض...")
         deals = fetch_deals()
-        new_deals = [d for d in deals if d.get("deal_id") not in seen]
+        new_deals = [d for d in deals if d.get("deal_id") not in seen and d.get("product_asin") not in seen]
         print(f"عروض جديدة: {len(new_deals)}")
 
         if new_deals:
             for deal in new_deals[:10]:
                 post_deal(deal)
                 seen.add(deal.get("deal_id"))
+                seen.add(deal.get("product_asin"))
                 save_seen(seen)
                 time.sleep(3)
             print(f"✅ تم نشر {min(len(new_deals), 10)} صيدة جديدة")
