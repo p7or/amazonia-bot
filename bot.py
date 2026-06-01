@@ -39,7 +39,7 @@ def fetch_deals():
         data = r.json()
         deals = data.get("data", {}).get("deals", [])
         print(f"Total deals from API: {len(deals)}")
-        filtered = [d for d in deals if d.get("savings_percentage", 0) >= MIN_DISCOUNT]
+        filtered = [d for d in deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
         print(f"Deals with +{MIN_DISCOUNT}% discount: {len(filtered)}")
         return filtered
     except Exception as e:
