@@ -137,7 +137,7 @@ def run_bot():
         else:
             print("لا توجد عروض جديدة")
 
-        print("⏰ انتظار ساعة...")
+        print("⏰ انتظار 5 دقائق...")
         time.sleep(300)
 
 if __name__ == "__main__":
