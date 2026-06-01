@@ -76,9 +76,8 @@ def fetch_deals():
         return []
 
 def post_deal(deal):
-    fire = "🔥" if (deal.get("savings_percentage") or 0) >= 70 else "⚡"
-    title = deal.get("deal_title", "منتج أمازون")[:80]
     discount = deal.get("savings_percentage") or 0
+    title = deal.get("deal_title", "منتج أمازون")[:80]
     price = deal.get("deal_price", {}).get("amount", 0)
     original = deal.get("list_price", {}).get("amount", 0)
     currency = deal.get("deal_price", {}).get("currency", "SAR")
@@ -86,13 +85,26 @@ def post_deal(deal):
     photo = deal.get("deal_photo", "")
     url = f"https://www.amazon.sa/dp/{asin}?tag={ASSOCIATE_TAG}" if asin else deal.get("deal_url", "")
 
-    caption = (
-        f"{fire} <b>{title}</b>\n\n"
-        f"🏷️ خصم <b>{discount}%</b>\n"
-        f"💰 <b>{price} {currency}</b> بدل <s>{original} {currency}</s>\n\n"
-        f"🛒 <a href='{url}'>اشتري من أمازون السعودية</a>\n\n"
-        f"#صيدات #أمازون #السعودية"
-    )
+    if discount >= 45:
+        caption = (
+            f"🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴\n"
+            f"🚨 <b>تنبيه صيدة نارية!</b> 🚨\n"
+            f"🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴\n\n"
+            f"🛍️ <b>{title}</b>\n\n"
+            f"💥 خصم <b>{discount}%</b>\n"
+            f"💰 <b>{price} {currency}</b> بدل <s>{original} {currency}</s>\n\n"
+            f"⏰ العرض محدود — لا تفوّته!\n\n"
+            f"🛒 <a href='{url}'>اشتري الآن من أمازون</a>\n\n"
+            f"#صيدة_نارية #صيدات #أمازون #السعودية"
+        )
+    else:
+        caption = (
+            f"⚡ <b>{title}</b>\n\n"
+            f"🏷️ خصم <b>{discount}%</b>\n"
+            f"💰 <b>{price} {currency}</b> بدل <s>{original} {currency}</s>\n\n"
+            f"🛒 <a href='{url}'>اشتري من أمازون السعودية</a>\n\n"
+            f"#صيدات #أمازون #السعودية"
+        )
 
     if photo:
         send_photo(photo, caption)
