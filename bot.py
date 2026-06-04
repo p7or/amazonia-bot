@@ -7,7 +7,8 @@ from datetime import datetime
 BOT_TOKEN = "8856681028:AAFhlhK86ykh5kmm6yax_wfBCtgkgO8ycQM"
 CHAT_ID = "-1003718314738"
 MIN_DISCOUNT = 20
-ASSOCIATE_TAG = "amazoniasa-21"
+ASSOCIATE_TAG_SA = "amazoniasa-21"
+ASSOCIATE_TAG_US = "amazoniasa-21"
 RAPIDAPI_KEY = "83f7accaedmshd6aaf3e480061f7p19cb11jsne3c6c8dbfef0"
 SEEN_FILE = "seen_deals.json"
 
@@ -52,10 +53,10 @@ def send_message(text):
         print(f"Message exception: {e}")
         return None
 
-def fetch_deals():
+def fetch_deals(country):
     url = "https://real-time-amazon-data.p.rapidapi.com/deals-v2"
     params = {
-        "country": "SA",
+        "country": country,
         "min_product_star_rating": "ALL",
         "price_range": "ALL",
         "discount_range": "ALL"
@@ -69,13 +70,13 @@ def fetch_deals():
         data = r.json()
         deals = data.get("data", {}).get("deals", [])
         filtered = [d for d in deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
-        print(f"Total: {len(deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
+        print(f"[{country}] Total: {len(deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
         return filtered
     except Exception as e:
-        print(f"API error: {e}")
+        print(f"API error [{country}]: {e}")
         return []
 
-def post_deal(deal):
+def post_deal(deal, country):
     discount = deal.get("savings_percentage") or 0
     title = deal.get("deal_title", "منتج أمازون")[:80]
     price = deal.get("deal_price", {}).get("amount", 0)
@@ -83,26 +84,40 @@ def post_deal(deal):
     currency = deal.get("deal_price", {}).get("currency", "SAR")
     asin = deal.get("product_asin", "")
     photo = deal.get("deal_photo", "")
-    url = f"https://www.amazon.sa/dp/{asin}?tag={ASSOCIATE_TAG}" if asin else deal.get("deal_url", "")
+
+    if country == "SA":
+        tag = ASSOCIATE_TAG_SA
+        domain = "amazon.sa"
+        flag = "🇸🇦"
+        label = "أمازون السعودية"
+    else:
+        tag = ASSOCIATE_TAG_US
+        domain = "amazon.com"
+        flag = "🇺🇸"
+        label = "أمازون الأمريكي"
+
+    url = f"https://www.{domain}/dp/{asin}?tag={tag}" if asin else deal.get("deal_url", "")
 
     if discount >= 45:
         caption = (
             f"🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴\n"
             f"🚨 <b>تنبيه صيدة نارية!</b> 🚨\n"
             f"🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴\n\n"
+            f"{flag} <b>{label}</b>\n\n"
             f"🛍️ <b>{title}</b>\n\n"
             f"💥 خصم <b>{discount}%</b>\n"
             f"💰 <b>{price} {currency}</b> بدل <s>{original} {currency}</s>\n\n"
             f"⏰ العرض محدود — لا تفوّته!\n\n"
-            f"🛒 <a href='{url}'>اشتري الآن من أمازون</a>\n\n"
+            f"🛒 <a href='{url}'>اشتري الآن من {label}</a>\n\n"
             f"#صيدة_نارية #صيدات #أمازون #السعودية"
         )
     else:
         caption = (
+            f"{flag} <b>{label}</b>\n\n"
             f"⚡ <b>{title}</b>\n\n"
             f"🏷️ خصم <b>{discount}%</b>\n"
             f"💰 <b>{price} {currency}</b> بدل <s>{original} {currency}</s>\n\n"
-            f"🛒 <a href='{url}'>اشتري من أمازون السعودية</a>\n\n"
+            f"🛒 <a href='{url}'>اشتري من {label}</a>\n\n"
             f"#صيدات #أمازون #السعودية"
         )
 
@@ -114,8 +129,10 @@ def post_deal(deal):
 def run_bot():
     print("🤖 بوت Amazonia SA يعمل...")
     send_message(
-        "🛍️ <b>بوت Amazonia SA</b> يعمل الآن! 🔥\n\n"
-        "سيتم نشر العروض الجديدة كل 5 دقائق\n\n"
+        "🛍️ <b>بوت Amazonia</b> يعمل الآن! 🔥\n\n"
+        "🇸🇦 عروض أمازون السعودية\n"
+        "🇺🇸 عروض أمازون الأمريكي\n\n"
+        "كل 5 دقائق — خصم +20%\n\n"
         "#صيدات #أمازون #السعودية"
     )
 
@@ -123,20 +140,24 @@ def run_bot():
 
     while True:
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] جاري جلب العروض...")
-        deals = fetch_deals()
-        new_deals = [d for d in deals if d.get("deal_id") not in seen and d.get("product_asin") not in seen]
-        print(f"عروض جديدة: {len(new_deals)}")
 
-        if new_deals:
-            for deal in new_deals[:10]:
-                post_deal(deal)
-                seen.add(deal.get("deal_id"))
-                seen.add(deal.get("product_asin"))
-                save_seen(seen)
-                time.sleep(3)
-            print(f"✅ تم نشر {min(len(new_deals), 10)} صيدة جديدة")
-        else:
-            print("لا توجد عروض جديدة")
+        for country in ["SA", "US"]:
+            deals = fetch_deals(country)
+            new_deals = [d for d in deals if d.get("deal_id") not in seen and d.get("product_asin") not in seen]
+            print(f"[{country}] عروض جديدة: {len(new_deals)}")
+
+            if new_deals:
+                for deal in new_deals[:10]:
+                    post_deal(deal, country)
+                    seen.add(deal.get("deal_id"))
+                    seen.add(deal.get("product_asin"))
+                    save_seen(seen)
+                    time.sleep(3)
+                print(f"✅ [{country}] تم نشر {min(len(new_deals), 10)} صيدة جديدة")
+            else:
+                print(f"[{country}] لا توجد عروض جديدة")
+
+            time.sleep(2)
 
         print("⏰ انتظار 5 دقائق...")
         time.sleep(300)
