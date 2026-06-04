@@ -98,7 +98,20 @@ def post_deal(deal, country):
 
     url = f"https://www.{domain}/dp/{asin}?tag={tag}" if asin else deal.get("deal_url", "")
 
-    if discount >= 45:
+    if discount >= 70:
+        caption = (
+            f"💣💣💣💣💣💣💣💣💣💣\n"
+            f"🚨🔥 <b>صيدة جنونية!</b> 🔥🚨\n"
+            f"💣💣💣💣💣💣💣💣💣💣\n\n"
+            f"{flag} <b>{label}</b>\n\n"
+            f"🛍️ <b>{title}</b>\n\n"
+            f"💥💥 خصم <b>{discount}%</b> 💥💥\n"
+            f"💰 <b>{price} {currency}</b> بدل <s>{original} {currency}</s>\n\n"
+            f"⚠️ سعر جنوني — اشتري قبل ما ينتهي!\n\n"
+            f"🛒 <a href='{url}'>اشتري الآن من {label}</a>\n\n"
+            f"#صيدة_جنونية #صيدة_نارية #صيدات #أمازون #السعودية"
+        )
+    elif discount >= 45:
         caption = (
             f"🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴\n"
             f"🚨 <b>تنبيه صيدة نارية!</b> 🚨\n"
@@ -127,7 +140,7 @@ def post_deal(deal, country):
         send_message(caption)
 
 def run_bot():
-    print("🤖 بوت Amazonia SA يعمل...")
+    print("🤖 بوت Amazonia يعمل...")
     send_message(
         "🛍️ <b>بوت Amazonia</b> يعمل الآن! 🔥\n\n"
         "🇸🇦 عروض أمازون السعودية\n"
