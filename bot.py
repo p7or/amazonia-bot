@@ -12,6 +12,12 @@ ASSOCIATE_TAG_US = "amazoniasa-21"
 RAPIDAPI_KEY = "83f7accaedmshd6aaf3e480061f7p19cb11jsne3c6c8dbfef0"
 SEEN_FILE = "seen_deals.json"
 
+BLOCKED_WORDS = [
+    "underwear", "lingerie", "bra", "panty", "panties",
+    "boxer", "brief", "briefs", "thong", "bikini bottom",
+    "ملابس داخلية", "حمالة", "بوكسر", "سروال داخلي"
+]
+
 def load_seen():
     if os.path.exists(SEEN_FILE):
         with open(SEEN_FILE, "r") as f:
@@ -69,7 +75,11 @@ def fetch_deals(country):
         r = requests.get(url, headers=headers, params=params, timeout=20)
         data = r.json()
         deals = data.get("data", {}).get("deals", [])
-        filtered = [d for d in deals if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT]
+        filtered = [
+            d for d in deals
+            if (d.get("savings_percentage") or 0) >= MIN_DISCOUNT
+            and not any(word.lower() in (d.get("deal_title") or "").lower() for word in BLOCKED_WORDS)
+        ]
         print(f"[{country}] Total: {len(deals)} | +{MIN_DISCOUNT}%: {len(filtered)}")
         return filtered
     except Exception as e:
